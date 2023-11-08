@@ -37,15 +37,9 @@ class Generator(GeneratorPreTrainedModel):
     def forward(self, input: Optional[torch.Tensor]):
         embeddings = self.encoder(input)
         image = self.projection(embeddings)
+        image = self.act(image)
         
-        return self.act(image)
-    
-    def reshape(self, input: Optional[torch.Tensor]):
-        images = []
-        for i in input:
-            images.append(i.view(self.config.img_channels, self.config.img_size, self.config.img_size).cpu())
-        
-        return images
+        return image.view(input.size(0), self.config.img_channels, self.config.img_size, self.config.img_size)
 
         
 class GanEncoder(nn.Module):
