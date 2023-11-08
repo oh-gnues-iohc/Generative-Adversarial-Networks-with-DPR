@@ -11,7 +11,7 @@ class GeneratorConfig(PretrainedConfig):
         img_size: int = 224,
         img_channels: Literal[1, 3] = 3,
         activation: Literal["relu", "gelu", "leakyrelu"] = "gelu",
-        latent_dim: int = 512,
+        latent_dim: int = 768,
         num_layer: int = 3,
         initializer_range: float = 0.02,
         **kwargs

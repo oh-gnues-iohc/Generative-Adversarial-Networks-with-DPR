@@ -26,6 +26,8 @@ class Generator(GeneratorPreTrainedModel):
     def __init__(self, config:GeneratorConfig):
         super().__init__(config)
         img_shape = (config.img_size ** 2) * config.img_channels
+        
+        self.config = config
         self.encoder = GanEncoder(config)
         self.projection = nn.Linear(128 * 2 ** config.num_layer, img_shape)
         self.act = nn.Tanh()
@@ -37,6 +39,14 @@ class Generator(GeneratorPreTrainedModel):
         image = self.projection(embeddings)
         
         return self.act(image)
+    
+    def reshape(self, input: Optional[torch.Tensor]):
+        images = []
+        for i in input:
+            images.append(i.view(self.config.img_channels, self.config.img_size, self.config.img_size).cpu())
+        
+        return images
+
         
 class GanEncoder(nn.Module):
     
