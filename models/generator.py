@@ -30,7 +30,7 @@ class Generator(GeneratorPreTrainedModel):
         self.config = config
         self.encoder = GanEncoder(config)
         self.projection = nn.Linear(128 * 2 ** config.num_layer, img_shape)
-        self.act = nn.Tanh()
+        self.act = nn.Sigmoid()
         
         self.post_init()
         
