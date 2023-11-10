@@ -79,23 +79,25 @@ class ImageTextRetrieval(ImageTextRetrievalPreTrainedModel):
             ):
         
         if model_name == "text":
-            return self.text_encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            ).last_hidden_state[:, 0, :]
+            return self.text_projection(
+                self.text_encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                ).last_hidden_state[:, 0, :])
         
         elif model_name == "image":
-            return self.image_encoder(
-            pixel_values=pixel_values,
-            output_hidden_states=output_hidden_states,
-            ).pooler_output[:, :, 0, 0]
+            return self.image_projection(
+                self.image_encoder(
+                pixel_values=pixel_values,
+                output_hidden_states=output_hidden_states,
+                ).pooler_output[:, :, 0, 0])
 
          
     def forward(
