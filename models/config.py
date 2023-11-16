@@ -12,6 +12,7 @@ class GeneratorConfig(PretrainedConfig):
         img_channels: Literal[1, 3] = 3,
         activation: Literal["relu", "gelu", "leakyrelu"] = "gelu",
         latent_dim: int = 512,
+        noise_dim: int = 64,
         num_layer: int = 3,
         initializer_range: float = 0.02,
         **kwargs
@@ -22,6 +23,7 @@ class GeneratorConfig(PretrainedConfig):
         self.img_channels = img_channels
         self.activation = activation
         self.latent_dim = latent_dim
+        self.noise_dim = noise_dim
         self.num_layer = num_layer
         self.initializer_range = initializer_range
         

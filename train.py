@@ -168,7 +168,7 @@ def train(args, generator, discriminator, tokenizer, processor, dataset):
     scheduler_D = transformers.get_scheduler(args.scheduler_type, optimizer=optimizer_D, 
                                             num_warmup_steps=get_warmup_steps(args.warmup_steps, args.warmup_ratio, num_training_steps), 
                                             num_training_steps=num_training_steps)
-    
+    g_loss = nn.MSELoss()
     for epoch in range(int(args.num_train_epochs)):
         with torch.no_grad():
             embs = discriminator.encode("text", **tokenized_text)
@@ -177,46 +177,26 @@ def train(args, generator, discriminator, tokenizer, processor, dataset):
                 draw_examples(output, examples[i], args.output_dir, f"epoch_{epoch}_{i}")
             if epoch % args.save_term == 0:
                 generator.save_pretrained(os.path.join(args.output_dir, f"epoch_{epoch}"))
+                
         total_loss_g = 0.0
         total_loss_d = 0.0
+        loss_g, loss_d = 0., 0. 
         
-        for batch in tqdm(dataloader):
+        torch.cuda.empty_cache()
             
-            for param in discriminator.parameters():
-                param.requires_grad = False
-            for param in generator.parameters():
-                param.requires_grad = True
-                
-            optimizer.zero_grad()
-                
-            text_embs = discriminator.encode("text", input_ids=batch["input_ids"].to(args.device), 
-                                             token_type_ids=batch["token_type_ids"].to(args.device), 
-                                             attention_mask=batch["attention_mask"].to(args.device))
-            pixel_values = generator(text_embs)
-            image_embs = discriminator.encode("image", pixel_values=pixel_values)
-            origin_image_embs = discriminator.encode("image", pixel_values=batch["pixel_values"].to(args.device))
-            
-            v2 = torch.cat((image_embs.unsqueeze(1), origin_image_embs.unsqueeze(1)), dim=1)
-            v2 = v2.view(-1, 512)
-            label = [i for i in range(v2.size(0)) if i % 2 == 0]
-            loss_g = loss(text_embs, v2, label)
-            
-            total_loss_g += loss_g.item()
-            loss_g.backward()
-            optimizer.step()
-            scheduler.step()
-            
-            for param in discriminator.parameters():
-                param.requires_grad = True
-            for param in generator.parameters():
-                param.requires_grad = False
+        for param in discriminator.parameters():
+            param.requires_grad = True
+        for param in generator.parameters():
+            param.requires_grad = False
 
+        for batch in tqdm(dataloader):
             optimizer_D.zero_grad()
             
             text_embs = discriminator.encode("text", input_ids=batch["input_ids"].to(args.device), 
                                     token_type_ids=batch["token_type_ids"].to(args.device), 
                                     attention_mask=batch["attention_mask"].to(args.device))
-            image_embs = discriminator.encode("image", pixel_values=pixel_values.detach())
+            pixel_values = generator(text_embs)
+            image_embs = discriminator.encode("image", pixel_values=pixel_values)
             origin_image_embs = discriminator.encode("image", pixel_values=batch["pixel_values"].to(args.device))
             v2 = torch.cat((origin_image_embs.unsqueeze(1), image_embs.unsqueeze(1)), dim=1)
             v2 = v2.view(-1, 512)
@@ -226,6 +206,31 @@ def train(args, generator, discriminator, tokenizer, processor, dataset):
             loss_d.backward()
             optimizer_D.step()
             scheduler_D.step()
+        
+        for param in discriminator.parameters():
+            param.requires_grad = False
+        for param in generator.parameters():
+            param.requires_grad = True
+                
+        for batch in tqdm(dataloader):
+            optimizer.zero_grad()
+                
+            text_embs = discriminator.encode("text", input_ids=batch["input_ids"].to(args.device), 
+                                             token_type_ids=batch["token_type_ids"].to(args.device), 
+                                             attention_mask=batch["attention_mask"].to(args.device))
+            pixel_values = generator(text_embs)
+            image_embs = discriminator.encode("image", pixel_values=pixel_values)
+            origin_image_embs = discriminator.encode("image", pixel_values=batch["pixel_values"].to(args.device))
+            
+            target = torch.tensor([0.] * image_embs.size(0)).to(image_embs.device)
+            score = torch.matmul(image_embs, torch.transpose(origin_image_embs, 0, 1))
+            log_score = torch.diagonal(-1 * F.log_softmax(score, dim=-1))
+            loss_g = g_loss(log_score, target)
+            
+            total_loss_g += loss_g.item()
+            loss_g.backward()
+            optimizer.step()
+            scheduler.step()
             
         print(f"{total_loss_g / len(dataloader)}, {total_loss_d / len(dataloader)}")
             
@@ -236,11 +241,12 @@ if __name__ == "__main__":
     model_args, dpr_args, data_args, train_args = parser.parse_args_into_dataclasses()
     
     # generator = Generator.from_pretrained(**vars(model_args))
-    generator = Generator(GeneratorConfig(num_layer=5, activation="relu", img_size=224))
+    generator = Generator(GeneratorConfig(num_layer=5, activation="gelu", img_size=224))
     
     # discriminator = ImageTextRetrieval.from_pretrained(dpr_args.dpr_model_name_or_path)
     discriminator = ImageTextRetrieval(ImageTextRetrievalConfig())
     discriminator.text_encoder = BertModel.from_pretrained("bert-base-uncased")
+    
     tokenizer = AutoTokenizer.from_pretrained(dpr_args.dpr_model_name_or_path)
     processor = AutoImageProcessor.from_pretrained(dpr_args.dpr_model_name_or_path)
     
